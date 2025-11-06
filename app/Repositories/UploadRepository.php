@@ -1,5 +1,4 @@
 <?php
-
 namespace App\Repositories;
 
 use Illuminate\Database\Eloquent\Collection;
@@ -37,8 +36,8 @@ class UploadRepository implements UploadRepositoryContract
                 ->usingFileName($file->getClientOriginalName())
                 ->toMediaCollection('files');
 
-            ProcessCSV::dispatch($upload);
-            
+            ProcessCSV::dispatch($upload)->onQueue('upload-sequence');
+
             return $upload->refresh();
         });
     }

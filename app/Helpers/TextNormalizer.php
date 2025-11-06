@@ -7,6 +7,7 @@ class TextNormalizer
     public static function normalize(string $s): string
     {
         $s = trim($s);
+        
         return class_exists(\Normalizer::class)
             ? \Normalizer::normalize($s, \Normalizer::FORM_C)
             : $s;
@@ -56,9 +57,10 @@ class TextNormalizer
     public static function clean(string $s): string
     {
         $enc = mb_detect_encoding($s, mb_detect_order(), true) ?: 'UTF-8';
-        $s   = iconv($enc, 'UTF-8//IGNORE', $s) ?: '';
+        $s = iconv($enc, 'UTF-8//IGNORE', $s) ?: '';
         $s = preg_replace('/[\x{FEFF}\x{200B}\x{200E}\x{200F}\x{00A0}]+/u', '', $s);
         $s = preg_replace('/[^\P{C}\t\r\n]+/u', '', $s);
+
         return trim($s);
     }
 }

@@ -23,11 +23,13 @@ export const useUploadStore = defineStore("uploads", {
     actions: {
         async fetchUploads() {
             const res = await api.get("/uploads");
-            this.list = res.data;
+            this.list = res.data ?? [];
         },
 
         async hydrateProgress() {
-            const active = this.list.filter((u) => u.status !== "completed" && u.status !== "failed");
+            const active = this.list.filter(
+                (u) => u.status !== "completed" && u.status !== "failed"
+            );
             if (!active.length) return;
 
             const calls = active.map(async (u) => {
@@ -45,16 +47,21 @@ export const useUploadStore = defineStore("uploads", {
 
         async uploadFile(file) {
             const form = new FormData();
-
             form.append("file", file);
 
-            const res = await api.post("/uploads", form);
+            const res = await api.post("/uploads", form, {
+                headers: { "Content-Type": "multipart/form-data" },
+            });
 
-            this.list.unshift(res.data);
+            const upload = res.data;
 
-            this.progress[res.data.id] = 0;
+            this.list.unshift(upload);
+
+            this.progress[upload.id] = 0;
 
             this.ensureRealtime();
+
+            return upload;
         },
 
         ensureRealtime() {
@@ -62,7 +69,7 @@ export const useUploadStore = defineStore("uploads", {
 
             window.Pusher = Pusher;
             window.Echo = new Echo({
-                broadcaster: "reverb",
+                broadcaster: "reverb", // use "pusher" if not using Reverb
                 key: import.meta.env.VITE_REVERB_APP_KEY ?? "localkey",
                 wsHost: import.meta.env.VITE_REVERB_HOST ?? "127.0.0.1",
                 wsPort: import.meta.env.VITE_REVERB_PORT ?? 8080,
@@ -75,7 +82,6 @@ export const useUploadStore = defineStore("uploads", {
                     this.progress[e.id] = e.progress;
 
                     const target = this.list.find((u) => u.id === e.id);
-
                     if (
                         target &&
                         target.status === "pending" &&
@@ -86,8 +92,10 @@ export const useUploadStore = defineStore("uploads", {
                 })
                 .listen(".UploadStatusUpdated", (e) => {
                     const target = this.list.find((u) => u.id === e.id);
-
-                    if (target) target.status = e.status;
+                    if (target) {
+                        target.status = e.status;
+                        target.file_name = e.file_name;
+                    }
 
                     if (e.status === "completed" || e.status === "failed") {
                         this.progress[e.id] =

@@ -1,24 +1,16 @@
 <template>
       <div class="bg-white rounded-lg shadow p-6">
-            <div 
-                  class="border-2 border-dashed rounded-lg p-8 flex items-center justify-between transition-colors duration-150"
+            <div class="border-2 border-dashed rounded-lg p-8 flex items-center justify-between transition-colors duration-150"
                   :class="[
                         isDragging ? 'bg-gray-100 border-gray-400' : 'border-gray-300 hover:border-blue-400',
                         loading ? 'cursor-not-allowed' : 'cursor-pointer'
-                  ]" 
-                  role="button" 
-                  tabindex="0" 
-                  @click="!loading && triggerFile()"
-                  @keydown.enter.prevent="!loading && triggerFile()" 
-                  @keydown.space.prevent="!loading && triggerFile()"
-                  @dragenter.stop.prevent="onDragEnter" 
-                  @dragover.stop.prevent="onDragOver"
-                  @dragleave.stop.prevent="onDragLeave" 
-                  @drop.stop.prevent="onDrop"
-                  >
+                  ]" role="button" tabindex="0" @click="!loading && triggerFile()"
+                  @keydown.enter.prevent="!loading && triggerFile()" @keydown.space.prevent="!loading && triggerFile()"
+                  @dragenter.stop.prevent="onDragEnter" @dragover.stop.prevent="onDragOver"
+                  @dragleave.stop.prevent="onDragLeave" @drop.stop.prevent="onDrop">
                   <div class="flex-1 text-left">
-                        <p class="text-gray-600 font-medium mb-0">Select file / Drag and drop</p>
-                        <input ref="fileInput" id="uploader" type="file" class="hidden" accept=".csv,.xls,.xlsx"
+                        <p class="text-gray-600 font-medium mb-0">Select files / Drag and drop</p>
+                        <input ref="fileInput" id="uploader" type="file" class="hidden" accept=".csv" multiple
                               @change="onFileSelect" />
                         <p v-if="error" class="text-red-600 text-sm mt-3">{{ error }}</p>
                   </div>
@@ -26,7 +18,7 @@
                   <button @click.stop="triggerFile()" :disabled="loading"
                         class="ml-6 px-4 py-2 rounded text-white transition-colors"
                         :class="loading ? 'bg-gray-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'">
-                        <span v-if="!loading">Upload File</span>
+                        <span v-if="!loading">Upload Files</span>
                         <span v-else class="flex items-center justify-center gap-2">
                               <svg class="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg"
                                     fill="none" viewBox="0 0 24 24">
@@ -107,55 +99,53 @@ const loading = computed(() => store.uploading);
 
 const triggerFile = () => !loading.value && fileInput.value?.click();
 
-const hasFiles = (e) => {
-      return Array.from(e.dataTransfer?.types || []).includes("Files");
-}
+const hasFiles = (e) => Array.from(e.dataTransfer?.types || []).includes("Files");
 
 const onDragEnter = (e) => {
       if (loading.value || !hasFiles(e)) return;
-      
       dragCount.value++;
       isDragging.value = true;
 };
 
 const onDragOver = (e) => {
       if (loading.value || !hasFiles(e)) return;
-
       e.dataTransfer.dropEffect = "copy";
       isDragging.value = true;
 };
 
 const onDragLeave = (e) => {
       if (loading.value || !hasFiles(e)) return;
-
       dragCount.value = Math.max(0, dragCount.value - 1);
-
       if (dragCount.value === 0) isDragging.value = false;
 };
 
 const onDrop = (e) => {
       if (!hasFiles(e)) return;
-
       dragCount.value = 0;
       isDragging.value = false;
-
       if (loading.value) return;
 
-      const file = e.dataTransfer.files?.[0];
-
-      if (file) handleFile(file);
+      const files = Array.from(e.dataTransfer.files || []).filter(f => f.name.endsWith(".csv"));
+      if (files.length) handleMultipleFiles(files);
 };
 
 const onFileSelect = (e) => {
-      const file = e.target.files[0];
+      const files = Array.from(e.target.files || []);
+      if (files.length) handleMultipleFiles(files);
+};
 
-      if (file) handleFile(file);
+const handleMultipleFiles = async (files) => {
+      error.value = "";
+      
+      for (const file of files) {
+            await handleFile(file);
+      }
+
+      fileInput.value.value = "";
 };
 
 const handleFile = async (file) => {
-      error.value = "";
       const allowed = ["text/csv", "application/vnd.ms-excel"];
-
       if (!allowed.includes(file.type) && !file.name.endsWith(".csv")) {
             error.value = "Only CSV files are allowed.";
             return;
@@ -174,23 +164,15 @@ const handleFile = async (file) => {
 
 const formatTime = (datetime) => {
       if (!datetime) return "-";
-
-      const date = new Date(datetime);
-
-      return date.toLocaleString("en-MY", { hour12: true });
+      return new Date(datetime).toLocaleString("en-MY", { hour12: true });
 };
 
 const timeAgo = (datetime) => {
       if (!datetime) return "-";
-
       const diff = (new Date() - new Date(datetime)) / 60000;
-
       if (diff < 1) return "just now";
-
       if (diff < 60) return `${Math.floor(diff)} minutes ago`;
-
       if (diff < 1440) return `${Math.floor(diff / 60)} hours ago`;
-
       return `${Math.floor(diff / 1440)} days ago`;
 };
 

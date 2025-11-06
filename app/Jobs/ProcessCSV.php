@@ -1,6 +1,8 @@
 <?php
+
 namespace App\Jobs;
 
+use Illuminate\Queue\Middleware\WithoutOverlapping;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use App\Contracts\UploadProcessorContract;
@@ -13,9 +15,12 @@ class ProcessCSV implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
-    public function __construct(public Upload $upload)
+    public function middleware(): array
     {
+        return [new WithoutOverlapping('csv-upload-sequence')];
     }
+
+    public function __construct(public Upload $upload) {}
 
     public function handle(UploadProcessorContract $processor): void
     {

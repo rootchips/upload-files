@@ -210,6 +210,13 @@ return [
             'timeout' => 60,
             'nice' => 0,
         ],
+        'upload-sequence' => [
+            'connection' => 'redis',
+            'queue' => ['upload-sequence'],
+            'balance' => 'auto',
+            'processes' => 1,
+            'tries' => 3,
+      ],
     ],
 
     'environments' => [
