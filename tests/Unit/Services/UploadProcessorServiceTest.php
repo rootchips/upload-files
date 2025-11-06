@@ -21,11 +21,11 @@ class UploadProcessorServiceTest extends TestCase
     #[\PHPUnit\Framework\Attributes\Test]
     public function test_success_processing_sets_completed_status()
     {
-        \Illuminate\Support\Facades\Event::fake();
-        app()->instance(\Illuminate\Broadcasting\BroadcastFactory::class, new class () {
-            public function event($event): \Illuminate\Broadcasting\PendingBroadcast
+        Event::fake();
+        app()->instance(BroadcastFactory::class, new class () {
+            public function event($event): PendingBroadcast
             {
-                return new \Illuminate\Broadcasting\PendingBroadcast(app('events'), $event);
+                return new PendingBroadcast(app('events'), $event);
             }
         });
 
@@ -69,17 +69,17 @@ class UploadProcessorServiceTest extends TestCase
     public function test_invalid_csv_sets_failed_status()
     {
         Event::fake();
-        app()->instance(\Illuminate\Broadcasting\BroadcastFactory::class, new class () {
-            public function event($event): \Illuminate\Broadcasting\PendingBroadcast
+        app()->instance(BroadcastFactory::class, new class () {
+            public function event($event): PendingBroadcast
             {
-                return new \Illuminate\Broadcasting\PendingBroadcast(app('events'), $event);
+                return new PendingBroadcast(app('events'), $event);
             }
         });
 
         $mockRepo = Mockery::mock(ProductRepositoryContract::class);
         $service  = new UploadProcessorService($mockRepo);
 
-        $upload = Mockery::mock(\App\Models\Upload::class)->makePartial();
+        $upload = Mockery::mock(Upload::class)->makePartial();
         $upload->id = 2;
         $upload->file_name = 'bad.csv';
         $upload->status = UploadStatus::Pending->value;
