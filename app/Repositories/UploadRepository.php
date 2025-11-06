@@ -2,14 +2,14 @@
 
 namespace App\Repositories;
 
+use Illuminate\Database\Eloquent\Collection;
 use App\Contracts\UploadRepositoryContract;
-use App\Enums\UploadStatus;
-use Illuminate\Support\Str;
-use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Str;
+use App\Enums\UploadStatus;
 use App\Jobs\ProcessCSV;
 use App\Models\Upload;
-use Illuminate\Database\Eloquent\Collection;
 
 class UploadRepository implements UploadRepositoryContract
 {
@@ -17,13 +17,17 @@ class UploadRepository implements UploadRepositoryContract
 
     public function all(): Collection
     {
-        return $this->model->newQuery()->latest()->get();
+        return $this->model
+            ->newQuery()
+            ->latest()
+            ->get();
     }
 
     public function create(UploadedFile $file): Upload
     {
         return DB::transaction(function () use ($file) {
-            $upload = Upload::create([
+            $upload = $this->model
+            ->create([
                 'id' => (string) Str::uuid(),
                 'file_name' => $file->getClientOriginalName(),
                 'status' => UploadStatus::Pending->value,
@@ -34,6 +38,7 @@ class UploadRepository implements UploadRepositoryContract
                 ->toMediaCollection('files');
 
             ProcessCSV::dispatch($upload);
+            
             return $upload->refresh();
         });
     }

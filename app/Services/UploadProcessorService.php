@@ -3,15 +3,14 @@ namespace App\Services;
 
 use App\Contracts\{UploadProcessorContract, ProductRepositoryContract};
 use App\Events\{UploadStatusUpdated, UploadProgressUpdated};
+use App\Helpers\{CSVUtils, TextNormalizer};
 use Illuminate\Support\Facades\Redis;
 use App\Enums\UploadStatus;
 use App\Models\Upload;
 
 class UploadProcessorService implements UploadProcessorContract
 {
-    public function __construct(private ProductRepositoryContract $products)
-    {
-    }
+    public function __construct(private ProductRepositoryContract $products) {}
 
     public function process(Upload $upload): void
     {
@@ -36,7 +35,7 @@ class UploadProcessorService implements UploadProcessorContract
                 return;
             }
 
-            $headers = array_map(fn ($h) => strtoupper($this->norm((string) $h)), $headers);
+            $headers = array_map(fn($h) => strtoupper(TextNormalizer::clean((string)$h)), $headers);
 
             if (!in_array('UNIQUE_KEY', $headers, true)) {
                 $upload->update(['status' => UploadStatus::Failed->value]);
@@ -45,7 +44,7 @@ class UploadProcessorService implements UploadProcessorContract
                 return;
             }
 
-            $total = max(0, $this->countLines($path) - 1);
+            $total = max(0, CSVUtils::countLines($path) - 1);
             $processed = 0;
             $successes = 0;
             $malformed = 0;
@@ -54,11 +53,11 @@ class UploadProcessorService implements UploadProcessorContract
             while (($row = fgetcsv($handle)) !== false) {
                 $processed++;
 
-                $row = array_map(fn ($v) => $this->norm((string) $v), $row);
+                $row = array_map(fn($v) => TextNormalizer::clean((string)$v), $row);
 
                 if (count($row) !== count($headers)) {
                     $malformed++;
-                    
+
                     $this->updateProgress($upload->id, $processed, $total);
                     continue;
                 }
@@ -124,31 +123,5 @@ class UploadProcessorService implements UploadProcessorContract
         if ($progress % 5 === 0 || $progress === 100) {
             broadcast(new UploadProgressUpdated($uploadId, $progress));
         }
-    }
-
-    private function countLines(string $path): int
-    {
-        $count  = 0;
-        $handle = fopen($path, 'r');
-
-        while (!feof($handle)) {
-            fgets($handle);
-            $count++;
-        }
-
-        fclose($handle);
-        return $count;
-    }
-
-    private function norm(string $s): string
-    {
-        $enc = mb_detect_encoding($s, mb_detect_order(), true) ?: 'UTF-8';
-        $s   = iconv($enc, 'UTF-8//IGNORE', $s) ?: '';
-
-        $s = preg_replace('/[\x{FEFF}\x{200B}\x{200E}\x{200F}\x{00A0}]+/u', '', $s);
-
-        $s = preg_replace('/[^\P{C}\t\r\n]+/u', '', $s);
-
-        return trim($s);
     }
 }
