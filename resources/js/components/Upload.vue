@@ -85,7 +85,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, computed } from "vue";
+import { ref, onMounted } from "vue";
 import { useUploadStore } from "@/stores/upload";
 import { storeToRefs } from "pinia";
 
@@ -95,7 +95,7 @@ const fileInput = ref(null);
 const store = useUploadStore();
 const { list: uploads, progress } = storeToRefs(store);
 const error = ref("");
-const loading = computed(() => store.uploading);
+const loading = ref(false);
 
 const triggerFile = () => !loading.value && fileInput.value?.click();
 
@@ -136,7 +136,7 @@ const onFileSelect = (e) => {
 
 const handleMultipleFiles = async (files) => {
       error.value = "";
-      
+
       for (const file of files) {
             await handleFile(file);
       }
