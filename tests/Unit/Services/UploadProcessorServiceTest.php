@@ -19,7 +19,7 @@ class UploadProcessorServiceTest extends TestCase
     use MockeryPHPUnitIntegration;
 
     #[\PHPUnit\Framework\Attributes\Test]
-    public function test_success_processing_sets_completed_status()
+    public function it_says_success_processing_sets_completed_status()
     {
         Event::fake();
         app()->instance(BroadcastFactory::class, new class () {
@@ -66,7 +66,7 @@ class UploadProcessorServiceTest extends TestCase
     }
 
     #[\PHPUnit\Framework\Attributes\Test]
-    public function test_invalid_csv_sets_failed_status()
+    public function it_says_invalid_csv_sets_failed_status()
     {
         Event::fake();
         app()->instance(BroadcastFactory::class, new class () {

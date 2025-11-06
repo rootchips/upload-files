@@ -3,9 +3,10 @@
 namespace Tests\Feature;
 
 use App\Contracts\ProductRepositoryContract;
+use App\Models\Product;
 use Illuminate\Pagination\LengthAwarePaginator as Paginator;
-use Tests\TestCase;
 use Mockery;
+use Tests\TestCase;
 
 class ProductControllerTest extends TestCase
 {
@@ -15,7 +16,7 @@ class ProductControllerTest extends TestCase
         $mock = Mockery::mock(ProductRepositoryContract::class);
 
         $items = collect([
-            [
+            Product::make([
                 'id' => 1,
                 'unique_key' => 165313,
                 'product_title' => 'Shirt',
@@ -25,8 +26,8 @@ class ProductControllerTest extends TestCase
                 'size' => 'M',
                 'color_name' => 'Blue',
                 'piece_price' => 10.5,
-            ],
-            [
+            ]),
+            Product::make([
                 'id' => 2,
                 'unique_key' => 165314,
                 'product_title' => 'Hat',
@@ -36,7 +37,7 @@ class ProductControllerTest extends TestCase
                 'size' => 'L',
                 'color_name' => 'Red',
                 'piece_price' => 5.0,
-            ],
+            ]),
         ]);
 
         $perPage = 10;
@@ -62,26 +63,30 @@ class ProductControllerTest extends TestCase
 
         $res->assertOk()
             ->assertJsonStructure([
-                'current_page',
-                'data' => [
-                    ['id','unique_key','product_title','product_description','style_no','sanmar_mainframe_color','size','color_name','piece_price'],
+                'data' => [[
+                    'id',
+                    'unique_key',
+                    'title',
+                    'description',
+                    'style_no',
+                    'sanmar_mainframe_color',
+                    'size',
+                    'color_name',
+                    'piece_price',
+                    'created_at',
+                    'updated_at',
+                ]],
+                'links' => [
+                    'first','last','prev','next',
                 ],
-                'first_page_url',
-                'from',
-                'last_page',
-                'last_page_url',
-                'links',
-                'next_page_url',
-                'path',
-                'per_page',
-                'prev_page_url',
-                'to',
-                'total',
+                'meta' => [
+                    'current_page','from','last_page','links','path','per_page','to','total',
+                ],
             ])
             ->assertJsonFragment(['unique_key' => 165313])
-            ->assertJsonPath('per_page', $perPage)
-            ->assertJsonPath('current_page', $currentPage)
-            ->assertJsonPath('total', $total);
+            ->assertJsonPath('meta.per_page', $perPage)
+            ->assertJsonPath('meta.current_page', $currentPage)
+            ->assertJsonPath('meta.total', $total);
     }
 
     #[\PHPUnit\Framework\Attributes\Test]
@@ -90,7 +95,7 @@ class ProductControllerTest extends TestCase
         $mock = Mockery::mock(ProductRepositoryContract::class);
 
         $items = collect([
-            [
+            Product::make([
                 'id' => 10,
                 'unique_key' => 165313,
                 'product_title' => 'Hat Classic',
@@ -100,7 +105,7 @@ class ProductControllerTest extends TestCase
                 'size' => 'M',
                 'color_name' => 'Black',
                 'piece_price' => 7.0,
-            ],
+            ]),
         ]);
 
         $search = 'hat';
@@ -126,8 +131,8 @@ class ProductControllerTest extends TestCase
         $res = $this->getJson("/api/products?per_page={$perPage}&search={$search}");
 
         $res->assertOk()
-            ->assertJsonPath('per_page', $perPage)
-            ->assertJsonPath('total', $total)
+            ->assertJsonPath('meta.per_page', $perPage)
+            ->assertJsonPath('meta.total', $total)
             ->assertJsonFragment(['unique_key' => 165313])
             ->assertJsonCount(1, 'data');
     }
