@@ -5,13 +5,14 @@ namespace Tests\Feature;
 use App\Contracts\ProductRepositoryContract;
 use Illuminate\Pagination\LengthAwarePaginator as Paginator;
 use Tests\TestCase;
+use Mockery;
 
 class ProductControllerTest extends TestCase
 {
     #[\PHPUnit\Framework\Attributes\Test]
     public function it_returns_paginated_products_with_defaults()
     {
-        $mock = \Mockery::mock(ProductRepositoryContract::class);
+        $mock = Mockery::mock(ProductRepositoryContract::class);
 
         $items = collect([
             [
@@ -86,7 +87,7 @@ class ProductControllerTest extends TestCase
     #[\PHPUnit\Framework\Attributes\Test]
     public function it_respects_search_and_custom_per_page()
     {
-        $mock = \Mockery::mock(ProductRepositoryContract::class);
+        $mock = Mockery::mock(ProductRepositoryContract::class);
 
         $items = collect([
             [
