@@ -88,11 +88,12 @@ php artisan serve
 
 ---
 
-## 6. Page Example
+## 6. Application Example
 
 Here’s how it looks when everything is running:
 
-![Dashboard Screenshot](docs/page.png)
+![Upload Page Screenshot](docs/upload.png)
+![Products Page Screenshot](docs/products.png)
 
 ![Upload Progress Demo](docs/demo.gif)
 
