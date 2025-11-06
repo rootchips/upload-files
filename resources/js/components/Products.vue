@@ -26,10 +26,6 @@
                               </tr>
                         </thead>
                         <tbody>
-                              <tr v-if="store.loading">
-                                    <td colspan="6" class="text-center p-4 text-gray-400">Loading...</td>
-                              </tr>
-
                               <tr v-for="(item, i) in store.list" :key="item.id" class="hover:bg-gray-50">
                                     <td class="border border-gray-200 p-3 text-sm text-gray-600">{{ i + 1 + (store.pagination.current_page - 1) *
                                           store.pagination.per_page }}</td>
