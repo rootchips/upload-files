@@ -8,34 +8,36 @@ use App\Models\Product;
 
 class ProductRepository implements ProductRepositoryContract
 {
+    public function __construct(private Product $model) {}
+
     public function paginate(?string $search, int $perPage = 10): LengthAwarePaginator
     {
-        $q = Product::query();
-
-        if ($search) {
-            $q->where(function ($s) use ($search) {
-                $s->where('unique_key', 'like', "%{$search}%")
+        return $this->model
+            ->query()
+            ->when($search, function ($q, $search) {
+                $q->where('unique_key', 'like', "%{$search}%")
                   ->orWhere('product_title', 'like', "%{$search}%")
                   ->orWhere('color_name', 'like', "%{$search}%");
-            });
-        }
-
-        return $q->orderByDesc('id')->paginate($perPage);
+            })
+            ->orderByDesc('id')
+            ->paginate($perPage);
     }
 
     public function upsert(array $data): void
     {
-        Product::updateOrCreate(
-            ['unique_key' => $data['UNIQUE_KEY']],
-            [
-                'product_title' => $data['PRODUCT_TITLE'],
-                'product_description' => $data['PRODUCT_DESCRIPTION'],
-                'style_no' => $data['STYLE#'],
-                'sanmar_mainframe_color' => $data['SANMAR_MAINFRAME_COLOR'],
-                'size' => $data['SIZE'],
-                'color_name' => $data['COLOR_NAME'],
-                'piece_price' => (float) preg_replace('/[^\d.]/', '', $data['PIECE_PRICE']),
-            ]
-        );
+        $this->model
+            ->query()
+            ->updateOrCreate(
+                ['unique_key' => $data['UNIQUE_KEY']],
+                [
+                  'product_title' => $data['PRODUCT_TITLE'],
+                  'product_description' => $data['PRODUCT_DESCRIPTION'],
+                  'style_no' => $data['STYLE#'],
+                  'sanmar_mainframe_color' => $data['SANMAR_MAINFRAME_COLOR'],
+                  'size' => $data['SIZE'],
+                  'color_name' => $data['COLOR_NAME'],
+                  'piece_price' => (float) preg_replace('/[^\d.]/', '', $data['PIECE_PRICE']),
+               ]
+            );
     }
 }

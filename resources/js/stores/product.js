@@ -27,13 +27,16 @@ export const useProductStore = defineStore("products", {
                 });
 
                 const response = res.data;
-                this.list = response.data;
+                this.list = response.data || [];
 
+                const meta = response.meta || {};
                 this.pagination = {
-                    current_page: response.current_page,
-                    per_page: response.per_page,
-                    total: response.total,
-                    last_page: response.last_page,
+                    current_page: meta.current_page ?? page,
+                    per_page: meta.per_page ?? this.pagination.per_page,
+                    total:
+                        meta.total ??
+                        (response.data ? response.data.length : 0),
+                    last_page: meta.last_page ?? 1,
                 };
             } finally {
                 this.loading = false;

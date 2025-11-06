@@ -9,24 +9,24 @@ use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use App\Jobs\ProcessCSV;
 use App\Models\Upload;
+use Illuminate\Database\Eloquent\Collection;
 
 class UploadRepository implements UploadRepositoryContract
 {
-    public function all(): array
+    public function __construct(private Upload $model) {}
+
+    public function all(): Collection
     {
-        return Upload::query()
-            ->latest()
-            ->get()
-            ->toArray();
+        return $this->model->newQuery()->latest()->get();
     }
 
     public function create(UploadedFile $file): Upload
     {
         return DB::transaction(function () use ($file) {
             $upload = Upload::create([
-                'id'        => (string) Str::uuid(),
+                'id' => (string) Str::uuid(),
                 'file_name' => $file->getClientOriginalName(),
-                'status'    => UploadStatus::Pending->value,
+                'status' => UploadStatus::Pending->value,
             ]);
 
             $upload->addMedia($file)
@@ -34,7 +34,6 @@ class UploadRepository implements UploadRepositoryContract
                 ->toMediaCollection('files');
 
             ProcessCSV::dispatch($upload);
-
             return $upload->refresh();
         });
     }

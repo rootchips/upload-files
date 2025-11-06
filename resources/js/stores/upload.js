@@ -23,7 +23,7 @@ export const useUploadStore = defineStore("uploads", {
     actions: {
         async fetchUploads() {
             const res = await api.get("/uploads");
-            this.list = res.data;
+            this.list = res.data.data;
         },
 
         async hydrateProgress() {
@@ -50,9 +50,9 @@ export const useUploadStore = defineStore("uploads", {
 
             const res = await api.post("/uploads", form);
 
-            this.list.unshift(res.data);
+            this.list.unshift(res.data.data);
 
-            this.progress[res.data.id] = 0;
+            this.progress[res.data.data.id] = 0;
 
             this.ensureRealtime();
         },

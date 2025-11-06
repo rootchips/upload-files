@@ -17,23 +17,43 @@
                   <table class="min-w-full border-collapse border border-gray-200 text-sm">
                         <thead class="bg-gray-100">
                               <tr>
-                                    <th class="border border-gray-200 p-3 text-left text-gray-700 text-sm font-semibold">#</th>
-                                    <th class="border border-gray-200 p-3 text-left text-gray-700 text-sm font-semibold">Unique Key</th>
-                                    <th class="border border-gray-200 p-3 text-left text-gray-700 text-sm font-semibold">Title</th>
-                                    <th class="border border-gray-200 p-3 text-left text-gray-700 text-sm font-semibold">Color</th>
-                                    <th class="border border-gray-200 p-3 text-left text-gray-700 text-sm font-semibold">Size</th>
-                                    <th class="border border-gray-200 p-3 text-left text-gray-700 text-sm font-semibold">Price</th>
+                                    <th
+                                          class="border border-gray-200 p-3 text-left text-gray-700 text-sm font-semibold">
+                                          #</th>
+                                    <th
+                                          class="border border-gray-200 p-3 text-left text-gray-700 text-sm font-semibold">
+                                          Unique Key</th>
+                                    <th
+                                          class="border border-gray-200 p-3 text-left text-gray-700 text-sm font-semibold">
+                                          Title</th>
+                                    <th
+                                          class="border border-gray-200 p-3 text-left text-gray-700 text-sm font-semibold">
+                                          Color</th>
+                                    <th
+                                          class="border border-gray-200 p-3 text-left text-gray-700 text-sm font-semibold">
+                                          Size</th>
+                                    <th
+                                          class="border border-gray-200 p-3 text-left text-gray-700 text-sm font-semibold">
+                                          Price</th>
                               </tr>
                         </thead>
                         <tbody>
                               <tr v-for="(item, i) in store.list" :key="item.id" class="hover:bg-gray-50">
-                                    <td class="border border-gray-200 p-3 text-sm text-gray-600">{{ i + 1 + (store.pagination.current_page - 1) *
-                                          store.pagination.per_page }}</td>
-                                    <td class="border border-gray-200 p-3 text-sm text-gray-600">{{ item.unique_key }}</td>
-                                    <td class="border border-gray-200 p-3 text-sm text-gray-600">{{ decodeHtml(item.product_title) }}</td>
-                                    <td class="border border-gray-200 p-3 text-sm text-gray-600">{{ item.color_name || '-' }}</td>
-                                    <td class="border border-gray-200 p-3 text-sm text-gray-600">{{ item.size || '-' }}</td>
-                                    <td class="border border-gray-200 p-3 text-sm text-gray-600 text-right">{{ formatPrice(item.piece_price) }}</td>
+                                    <td class="border border-gray-200 p-3 text-sm text-gray-600">
+                                          {{ i + 1 + (store.pagination.current_page - 1) * store.pagination.per_page }}
+                                    </td>
+                                    <td class="border border-gray-200 p-3 text-sm text-gray-600">{{ item.unique_key }}
+                                    </td>
+                                    <td class="border border-gray-200 p-3 text-sm text-gray-600">
+                                          {{ decodeHtml(item.title) }}
+                                    </td>
+                                    <td class="border border-gray-200 p-3 text-sm text-gray-600">{{ item.color_name ||
+                                          '-' }}</td>
+                                    <td class="border border-gray-200 p-3 text-sm text-gray-600">{{ item.size || '-' }}
+                                    </td>
+                                    <td class="border border-gray-200 p-3 text-sm text-gray-600 text-right">
+                                          {{ formatPrice(item.piece_price) }}
+                                    </td>
                               </tr>
 
                               <tr v-if="!store.loading && store.list.length === 0">
@@ -47,12 +67,12 @@
                   <div>Showing {{ store.pagination.current_page }} / {{ store.pagination.last_page }} pages</div>
                   <div class="flex gap-1">
                         <button @click="store.fetch(store.pagination.current_page - 1)"
-                              :disabled="store.pagination.current_page <= 1"
+                              :disabled="store.pagination.current_page <= 1 || store.loading"
                               class="px-3 py-1 border border-gray-200 rounded disabled:opacity-40 hover:bg-gray-100">
                               Prev
                         </button>
                         <button @click="store.fetch(store.pagination.current_page + 1)"
-                              :disabled="store.pagination.current_page >= store.pagination.last_page"
+                              :disabled="store.pagination.current_page >= store.pagination.last_page || store.loading"
                               class="px-3 py-1 border border-gray-200 rounded disabled:opacity-40 hover:bg-gray-100">
                               Next
                         </button>
@@ -62,18 +82,19 @@
 </template>
 
 <script setup>
-import { onMounted } from 'vue';
-import { useProductStore } from '@/stores/product';
+import { onMounted } from 'vue'
+import { useProductStore } from '@/stores/product'
 
-const store = useProductStore();
+const store = useProductStore()
 
-onMounted(() => store.fetch());
+onMounted(() => store.fetch())
 
-const formatPrice = (p) => (p ? `$${Number(p).toFixed(2)}` : '-');
+const formatPrice = (p) => (p != null ? `$${Number(p).toFixed(2)}` : '-')
 
 const decodeHtml = (text) => {
-  const el = document.createElement('textarea');
-  el.innerHTML = text;
-  return el.value;
-};
+      if (!text) return ''
+      const el = document.createElement('textarea')
+      el.innerHTML = text
+      return el.value
+}
 </script>
