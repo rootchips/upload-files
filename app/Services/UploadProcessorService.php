@@ -1,12 +1,11 @@
 <?php
-
 namespace App\Services;
 
 use App\Contracts\{UploadProcessorContract, ProductRepositoryContract};
-use App\Enums\UploadStatus;
 use App\Events\{UploadStatusUpdated, UploadProgressUpdated};
-use App\Models\Upload;
 use Illuminate\Support\Facades\Redis;
+use App\Enums\UploadStatus;
+use App\Models\Upload;
 
 class UploadProcessorService implements UploadProcessorContract
 {
@@ -19,7 +18,6 @@ class UploadProcessorService implements UploadProcessorContract
         $path = $upload->getFirstMediaPath('files');
 
         $upload->update(['status' => UploadStatus::Processing->value]);
-
         broadcast(new UploadStatusUpdated($upload));
 
         try {
@@ -33,25 +31,17 @@ class UploadProcessorService implements UploadProcessorContract
 
             if (!$headers || !is_array($headers)) {
                 $upload->update(['status' => UploadStatus::Failed->value]);
-
                 broadcast(new UploadStatusUpdated($upload));
-
                 fclose($handle);
                 return;
             }
 
-            $headers = array_map(
-                fn ($h) => strtoupper(trim(preg_replace('/[\x{FEFF}\x{200B}\x{00A0}]+/u', '', (string) $h))),
-                $headers
-            );
+            $headers = array_map(fn ($h) => strtoupper($this->norm((string) $h)), $headers);
 
             if (!in_array('UNIQUE_KEY', $headers, true)) {
                 $upload->update(['status' => UploadStatus::Failed->value]);
-
                 broadcast(new UploadStatusUpdated($upload));
-
                 fclose($handle);
-
                 return;
             }
 
@@ -63,6 +53,8 @@ class UploadProcessorService implements UploadProcessorContract
 
             while (($row = fgetcsv($handle)) !== false) {
                 $processed++;
+
+                $row = array_map(fn ($v) => $this->norm((string) $v), $row);
 
                 if (count($row) !== count($headers)) {
                     $malformed++;
@@ -94,20 +86,20 @@ class UploadProcessorService implements UploadProcessorContract
 
             if ($successes === 0) {
                 $upload->update([
-                    'status' => UploadStatus::Failed->value,
+                    'status'       => UploadStatus::Failed->value,
                     'processed_at' => now(),
                 ]);
             } else {
                 $errorRate = $processed > 0 ? (($malformed + $upsertErrors) / $processed) : 0.0;
-                
+
                 if ($errorRate >= 0.90) {
                     $upload->update([
-                        'status' => UploadStatus::Failed->value,
+                        'status'       => UploadStatus::Failed->value,
                         'processed_at' => now(),
                     ]);
                 } else {
                     $upload->update([
-                        'status' => UploadStatus::Completed->value,
+                        'status'       => UploadStatus::Completed->value,
                         'processed_at' => now(),
                     ]);
                 }
@@ -136,13 +128,27 @@ class UploadProcessorService implements UploadProcessorContract
 
     private function countLines(string $path): int
     {
-        $count = 0;
+        $count  = 0;
         $handle = fopen($path, 'r');
+
         while (!feof($handle)) {
             fgets($handle);
             $count++;
         }
+
         fclose($handle);
         return $count;
+    }
+
+    private function norm(string $s): string
+    {
+        $enc = mb_detect_encoding($s, mb_detect_order(), true) ?: 'UTF-8';
+        $s   = iconv($enc, 'UTF-8//IGNORE', $s) ?: '';
+
+        $s = preg_replace('/[\x{FEFF}\x{200B}\x{200E}\x{200F}\x{00A0}]+/u', '', $s);
+
+        $s = preg_replace('/[^\P{C}\t\r\n]+/u', '', $s);
+
+        return trim($s);
     }
 }
