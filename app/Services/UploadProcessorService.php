@@ -4,7 +4,7 @@ namespace App\Services;
 
 use App\Contracts\{UploadProcessorContract, ProductRepositoryContract};
 use App\Events\{UploadStatusUpdated, UploadProgressUpdated};
-use Illuminate\Support\Facades\Redis;
+use Illuminate\Support\Facades\{Bus, Redis};
 use App\Helpers\TextNormalizer;
 use App\Enums\UploadStatus;
 use App\Models\Upload;
@@ -15,23 +15,19 @@ use Throwable;
 class UploadProcessorService implements UploadProcessorContract
 {
     public function __construct(private ProductRepositoryContract $products) {}
+
     public function process(Upload $upload): void
     {
         $this->setStatus($upload, UploadStatus::Processing);
 
         try {
-            $records = $this->readCsv($upload);
-            $this->processData($upload, $records);
-            $this->setStatus($upload, UploadStatus::Completed);
-
+            $data = $this->readCsv($upload);
+            $this->dispatchBatchJobs($upload, $data);
         } catch (Throwable $e) {
             $this->setStatus($upload, UploadStatus::Failed);
-            throw $e;
-
-        } finally {
             Redis::del("upload:progress:{$upload->id}");
             broadcast(new UploadStatusUpdated($upload->fresh()));
-
+            throw $e;
         }
     }
 
@@ -41,59 +37,56 @@ class UploadProcessorService implements UploadProcessorContract
         $csv->setHeaderOffset(0);
 
         $headers = array_map(fn ($h) => strtoupper(TextNormalizer::clean($h)), $csv->getHeader());
-
         if (!in_array('UNIQUE_KEY', $headers, true)) {
             throw new RuntimeException('Missing UNIQUE_KEY column.');
         }
 
-        $records = iterator_to_array($csv->getRecords(), false);
-
-        if (empty($records)) {
-            throw new RuntimeException('No records found.');
+        $data = iterator_to_array($csv->getRecords(), false);
+        if (empty($data)) {
+            throw new RuntimeException('No data found.');
         }
 
-        return ['headers' => $headers, 'records' => $records];
+        return $data;
     }
 
-    private function processData(Upload $upload, array $data): void
+    private function dispatchBatchJobs(Upload $upload, array $data): void
     {
-        ['headers' => $headers, 'records' => $records] = $data;
+        $total = count($data);
+        $chunks = collect($data)->chunk(500);
+        $uploadId = $upload->id;
+        $productClass = get_class($this->products);
 
-        $total = count($records);
-        $batch = [];
+        $batch = Bus::batch(
+            $chunks->map(
+                fn ($chunk, $i) =>
+                function () use ($productClass, $chunk, $total, $uploadId, $i) {
+                    $repo = app($productClass);
+                    $repo->upsert($chunk->toArray());
 
-        foreach ($records as $i => $row) {
-            $data = array_change_key_case($row, CASE_UPPER);
-            $data = array_map(fn ($v) => TextNormalizer::clean((string)$v), $data);
+                    $processed = min(($i + 1) * 500, $total);
+                    $progress = (int)(($processed / $total) * 100);
+                    Redis::set("upload:progress:{$uploadId}", $progress);
 
-            if (count($data) !== count($headers) || empty($data['UNIQUE_KEY'])) {
-                throw new RuntimeException("Malformed row at line " . ($i + 2));
-            }
+                    if ($progress % 5 === 0 || $progress === 100) {
+                        broadcast(new UploadProgressUpdated($uploadId, $progress));
+                    }
+                }
+            )
+        )
+        ->name("Upload {$upload->id}")
+        ->onQueue('upload-sequence')
+        ->then(fn () => $this->setStatus($upload, UploadStatus::Completed))
+        ->catch(function () use ($upload) {
+            $uploadId = $upload->id;
+            Redis::set("upload:progress:{$uploadId}", 100);
+            broadcast(new UploadProgressUpdated($uploadId, 100));
 
-            $batch[] = $data;
+            $this->setStatus($upload, UploadStatus::Failed);
+        })
+        ->finally(fn () => Redis::del("upload:progress:{$upload->id}"))
+        ->dispatch();
 
-            if (count($batch) >= 500) {
-                $this->products->upsert($batch);
-                $batch = [];
-            }
-
-            $this->updateProgress($upload->id, $i + 1, $total);
-        }
-
-        if (!empty($batch)) {
-            $this->products->upsert($batch);
-        }
-    }
-
-    private function updateProgress(string $uploadId, int $processed, int $total): void
-    {
-        $progress = (int)(($processed / $total) * 100);
-        if ($progress % 5 !== 0 && $progress !== 100) {
-            return;
-        }
-
-        Redis::set("upload:progress:{$uploadId}", $progress);
-        broadcast(new UploadProgressUpdated($uploadId, $progress));
+        Redis::set("upload:batch:{$upload->id}", $batch->id);
     }
 
     private function setStatus(Upload $upload, UploadStatus $status): void
