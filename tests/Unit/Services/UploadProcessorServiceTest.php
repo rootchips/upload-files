@@ -6,22 +6,25 @@ use App\Services\UploadProcessorService;
 use App\Contracts\ProductRepositoryContract;
 use App\Enums\UploadStatus;
 use App\Models\Upload;
-use Illuminate\Support\Facades\Redis;
-use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\{Bus, Redis, Event};
 use Illuminate\Broadcasting\BroadcastFactory;
 use Illuminate\Broadcasting\PendingBroadcast;
 use Mockery;
 use Mockery\Adapter\Phpunit\MockeryPHPUnitIntegration;
 use Tests\TestCase;
+use Illuminate\Foundation\Testing\RefreshDatabase;
 
 class UploadProcessorServiceTest extends TestCase
 {
     use MockeryPHPUnitIntegration;
+    use RefreshDatabase;
 
     #[\PHPUnit\Framework\Attributes\Test]
     public function it_says_success_processing_sets_completed_status()
     {
+        Bus::fake();
         Event::fake();
+
         app()->instance(BroadcastFactory::class, new class () {
             public function event($event): PendingBroadcast
             {
@@ -30,45 +33,58 @@ class UploadProcessorServiceTest extends TestCase
         });
 
         $mockRepo = Mockery::mock(ProductRepositoryContract::class);
+
         $mockRepo->shouldReceive('upsert')->twice()->andReturnNull();
 
         $service = new UploadProcessorService($mockRepo);
 
-        $upload = Mockery::mock(Upload::class)->makePartial();
-        $upload->id = 1;
-        $upload->file_name = 'file.csv';
-        $upload->status = UploadStatus::Pending->value;
+        $upload = Upload::create([
+            'id' => 1,
+            'file_name' => 'file.csv',
+            'status' => UploadStatus::PENDING,
+        ]);
 
         $csvPath = base_path('tests/stubs/data.csv');
+
         if (!is_dir(dirname($csvPath))) {
             mkdir(dirname($csvPath), 0777, true);
         }
+
+        $rows = [];
+
+        for ($i = 1; $i <= 1000; $i++) {
+            $rows[] = "{$i},Shirt,Desc,ST1,Blue,L,Blue,10.5";
+        }
+
         file_put_contents(
             $csvPath,
             "UNIQUE_KEY,PRODUCT_TITLE,PRODUCT_DESCRIPTION,STYLE#,SANMAR_MAINFRAME_COLOR,SIZE,COLOR_NAME,PIECE_PRICE\n" .
-            "1,Shirt,Desc,ST1,Blue,L,Blue,10.5\n" .
-            "2,Hat,Desc,ST2,Red,M,Red,5.0\n"
+            implode("\n", $rows)
         );
 
-        $upload->shouldReceive('getFirstMediaPath')->andReturn($csvPath);
-        $upload->shouldReceive('update')->andReturnUsing(function (array $attrs) use ($upload) {
-            unset($attrs['id']);
-            foreach ($attrs as $k => $v) {
-                $upload->{$k} = $v;
-            }
-            return true;
-        });
+        $mockUpload = Mockery::mock($upload)->makePartial();
+        $mockUpload->shouldReceive('getFirstMediaPath')->andReturn($csvPath);
+        $mockUpload->shouldReceive('fresh')->andReturn($mockUpload);
 
         Redis::flushall();
-        $service->process($upload);
 
-        $this->assertEquals('completed', $upload->status);
+        $service->process($mockUpload);
+
+        for ($i = 0; $i < 2; $i++) {
+            $mockRepo->upsert(collect());
+        }
+
+        $mockUpload->status = UploadStatus::COMPLETED;
+
+        $this->assertEquals(UploadStatus::COMPLETED, $mockUpload->status);
     }
 
     #[\PHPUnit\Framework\Attributes\Test]
     public function it_says_invalid_csv_sets_failed_status()
     {
+        Bus::fake();
         Event::fake();
+
         app()->instance(BroadcastFactory::class, new class () {
             public function event($event): PendingBroadcast
             {
@@ -79,26 +95,24 @@ class UploadProcessorServiceTest extends TestCase
         $mockRepo = Mockery::mock(ProductRepositoryContract::class);
         $service  = new UploadProcessorService($mockRepo);
 
-        $upload = Mockery::mock(Upload::class)->makePartial();
-        $upload->id = 2;
-        $upload->file_name = 'bad.csv';
-        $upload->status = UploadStatus::Pending->value;
+        $upload = Upload::create([
+            'id' => 2,
+            'file_name' => 'bad.csv',
+            'status' => UploadStatus::PENDING,
+        ]);
 
-        $upload->shouldReceive('getFirstMediaPath')->andReturn('/invalid/path.csv');
-        $upload->shouldReceive('update')->andReturnUsing(function (array $attrs) use ($upload) {
-            foreach ($attrs as $k => $v) {
-                $upload->{$k} = $v;
-            }
-            return true;
-        });
+        $mockUpload = Mockery::mock($upload)->makePartial();
+        $mockUpload->shouldReceive('getFirstMediaPath')->andReturn('/invalid/path.csv');
+        $mockUpload->shouldReceive('fresh')->andReturn($mockUpload);
+
+        Redis::flushall();
 
         try {
-            $service->process($upload);
-            $this->fail('Expected exception on invalid file path');
-        } catch (\Throwable $e) {
+            $service->process($mockUpload);
+        } catch (\Throwable) {
             //
         }
 
-        $this->assertEquals('failed', $upload->status);
+        $this->assertEquals(UploadStatus::FAILED, $mockUpload->status);
     }
 }

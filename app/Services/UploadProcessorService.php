@@ -18,13 +18,13 @@ class UploadProcessorService implements UploadProcessorContract
 
     public function process(Upload $upload): void
     {
-        $this->setStatus($upload, UploadStatus::Processing);
+        $this->setStatus($upload, UploadStatus::PROCESSING);
 
         try {
             $data = $this->readCsv($upload);
             $this->dispatchBatchJobs($upload, $data);
         } catch (Throwable $e) {
-            $this->setStatus($upload, UploadStatus::Failed);
+            $this->setStatus($upload, UploadStatus::FAILED);
             Redis::del("upload:progress:{$upload->id}");
             broadcast(new UploadStatusUpdated($upload->fresh()));
             throw $e;
@@ -74,14 +74,14 @@ class UploadProcessorService implements UploadProcessorContract
         )
         ->name("Upload {$upload->id}")
         ->onQueue('upload-sequence')
-        ->then(fn () => $this->setStatus($upload, UploadStatus::Completed))
+        ->then(fn () => $this->setStatus($upload, UploadStatus::COMPLETED))
         ->allowFailures(true)
         ->catch(function () use ($upload) {
             $uploadId = $upload->id;
             Redis::set("upload:progress:{$uploadId}", 100);
             broadcast(new UploadProgressUpdated($uploadId, 100));
 
-            $this->setStatus($upload, UploadStatus::Failed);
+            $this->setStatus($upload, UploadStatus::FAILED);
         })
         ->finally(fn () => Redis::del("upload:progress:{$upload->id}"))
         ->dispatch();
@@ -92,7 +92,7 @@ class UploadProcessorService implements UploadProcessorContract
     private function setStatus(Upload $upload, UploadStatus $status): void
     {
         $upload->update([
-            'status' => $status->value,
+            'status' => $status,
             'processed_at' => now(),
         ]);
 

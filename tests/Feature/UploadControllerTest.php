@@ -22,32 +22,33 @@ class UploadControllerTest extends TestCase
         $res = $this->postJson('/api/uploads', ['file' => $file]);
 
         $res->assertStatus(201)
-            ->assertJsonFragment(['status' => UploadStatus::Pending->value]);
+            ->assertJsonFragment(['status' => UploadStatus::PENDING]);
     }
 
     #[\PHPUnit\Framework\Attributes\Test]
     public function it_upload_progress_and_status_flow()
     {
-        $upload = Upload::factory()->create(['status' => UploadStatus::Pending->value]);
-        $upload->update(['status' => UploadStatus::Processing->value]);
-        $this->assertEquals(UploadStatus::Processing->value, $upload->fresh()->status);
-        $upload->update(['status' => UploadStatus::Completed->value]);
-        $this->assertEquals(UploadStatus::Completed->value, $upload->fresh()->status);
+        $upload = Upload::factory()->create(['status' => UploadStatus::PENDING]);
+        $upload->update(['status' => UploadStatus::PROCESSING]);
+        $this->assertEquals(UploadStatus::PROCESSING, $upload->fresh()->status);
+
+        $upload->update(['status' => UploadStatus::COMPLETED]);
+        $this->assertEquals(UploadStatus::COMPLETED, $upload->fresh()->status);
     }
 
     #[\PHPUnit\Framework\Attributes\Test]
     public function it_failed_status_is_saved()
     {
-        $upload = Upload::factory()->create(['status' => UploadStatus::Pending->value]);
-        $upload->update(['status' => UploadStatus::Failed->value]);
-        $this->assertEquals('failed', $upload->fresh()->status);
+        $upload = Upload::factory()->create(['status' => UploadStatus::PENDING]);
+        $upload->update(['status' => UploadStatus::FAILED]);
+        $this->assertEquals(UploadStatus::FAILED, $upload->fresh()->status);
     }
 
     #[\PHPUnit\Framework\Attributes\Test]
     public function it_uploads_index_returns_transformed_items()
     {
-        Upload::factory()->create(['file_name' => 'a.csv', 'status' => 'pending']);
-        Upload::factory()->create(['file_name' => 'b.csv', 'status' => 'completed']);
+        Upload::factory()->create(['file_name' => 'a.csv', 'status' => UploadStatus::PENDING]);
+        Upload::factory()->create(['file_name' => 'b.csv', 'status' => UploadStatus::COMPLETED]);
 
         $res = $this->getJson('/api/uploads');
 

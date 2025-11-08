@@ -29,7 +29,7 @@ class UploadRepository implements UploadRepositoryContract
             ->create([
                 'id' => (string) Str::uuid(),
                 'file_name' => $file->getClientOriginalName(),
-                'status' => UploadStatus::Pending->value,
+                'status' => UploadStatus::PENDING,
             ]);
 
             $upload->addMedia($file)
@@ -44,6 +44,6 @@ class UploadRepository implements UploadRepositoryContract
 
     public function updateStatus(Upload $upload, UploadStatus $status): void
     {
-        $upload->update(['status' => $status->value]);
+        $upload->update(['status' => $status]);
     }
 }
