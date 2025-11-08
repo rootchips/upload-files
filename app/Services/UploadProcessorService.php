@@ -60,8 +60,7 @@ class UploadProcessorService implements UploadProcessorContract
             $chunks->map(
                 fn ($chunk, $i) =>
                 function () use ($productClass, $chunk, $total, $uploadId, $i) {
-                    $repo = app($productClass);
-                    $repo->upsert($chunk->toArray());
+                    app($productClass)->upsert($chunk);
 
                     $processed = min(($i + 1) * 500, $total);
                     $progress = (int)(($processed / $total) * 100);
@@ -76,6 +75,7 @@ class UploadProcessorService implements UploadProcessorContract
         ->name("Upload {$upload->id}")
         ->onQueue('upload-sequence')
         ->then(fn () => $this->setStatus($upload, UploadStatus::Completed))
+        ->allowFailures(true)
         ->catch(function () use ($upload) {
             $uploadId = $upload->id;
             Redis::set("upload:progress:{$uploadId}", 100);
