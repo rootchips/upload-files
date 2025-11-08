@@ -1,20 +1,19 @@
 <?php
+
 namespace App\Repositories;
 
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use App\Contracts\ProductRepositoryContract;
 use App\Helpers\TextNormalizer;
 use App\Models\Product;
+use Throwable;
+use Log;
 
 class ProductRepository implements ProductRepositoryContract
 {
-    public function __construct(private Product $model)
-    {
-    }
-
+    public function __construct(private Product $model) {}
     public function paginate(?string $search, int $perPage = 10): LengthAwarePaginator
     {
-
         return $this->model->newQuery()
             ->when($search, function ($q, $search) {
                 $decoded = TextNormalizer::decode($search);
@@ -33,19 +32,47 @@ class ProductRepository implements ProductRepositoryContract
             ->paginate($perPage);
     }
 
-    public function upsert(array $data): void
+    public function upsert(array $rows): void
     {
-        $this->model->updateOrCreate(
-            ['unique_key' => $data['UNIQUE_KEY']],
-            [
-                'product_title' => $data['PRODUCT_TITLE'],
-                'product_description' => $data['PRODUCT_DESCRIPTION'],
-                'style_no' => $data['STYLE#'],
-                'sanmar_mainframe_color' => $data['SANMAR_MAINFRAME_COLOR'],
-                'size' => $data['SIZE'],
-                'color_name' => $data['COLOR_NAME'],
-                'piece_price' => (float) preg_replace('/[^\d.]/', '', $data['PIECE_PRICE']),
-            ]
-        );
+        if (empty($rows)) {
+            return;
+        }
+
+        try {
+            collect($rows)
+                ->chunk(500)
+                ->each(
+                    fn ($chunk) =>
+                    $this->model->upsert(
+                        $chunk->map(fn ($item) => [
+                            'unique_key' => $item['unique_key'] ?? $item['UNIQUE_KEY'] ?? null,
+                            'product_title' => $item['product_title'] ?? $item['PRODUCT_TITLE'] ?? null,
+                            'product_description' => $item['product_description'] ?? $item['PRODUCT_DESCRIPTION'] ?? null,
+                            'style_no' => $item['style_no'] ?? $item['STYLE#'] ?? null,
+                            'sanmar_mainframe_color' => $item['sanmar_mainframe_color'] ?? $item['SANMAR_MAINFRAME_COLOR'] ?? null,
+                            'size' => $item['size'] ?? $item['SIZE'] ?? null,
+                            'color_name' => $item['color_name'] ?? $item['COLOR_NAME'] ?? null,
+                            'piece_price' => (float)preg_replace('/[^\d.]/', '', $item['piece_price'] ?? $item['PIECE_PRICE'] ?? 0),
+                        ])->toArray(),
+                        uniqueBy: ['unique_key'],
+                        update: [
+                            'product_title',
+                            'product_description',
+                            'style_no',
+                            'sanmar_mainframe_color',
+                            'size',
+                            'color_name',
+                            'piece_price',
+                        ]
+                    )
+                );
+        } catch (Throwable $e) {
+            Log::error('Upsert failed', [
+                'message' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+
+            throw $e;
+        }
     }
 }

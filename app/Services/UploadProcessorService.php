@@ -1,127 +1,108 @@
 <?php
+
 namespace App\Services;
 
 use App\Contracts\{UploadProcessorContract, ProductRepositoryContract};
 use App\Events\{UploadStatusUpdated, UploadProgressUpdated};
-use App\Helpers\{CSVUtils, TextNormalizer};
 use Illuminate\Support\Facades\Redis;
+use App\Helpers\TextNormalizer;
 use App\Enums\UploadStatus;
 use App\Models\Upload;
+use League\Csv\Reader;
+use RuntimeException;
+use Throwable;
 
 class UploadProcessorService implements UploadProcessorContract
 {
     public function __construct(private ProductRepositoryContract $products) {}
-
     public function process(Upload $upload): void
     {
-        $path = $upload->getFirstMediaPath('files');
-
-        $upload->update(['status' => UploadStatus::Processing->value]);
-        broadcast(new UploadStatusUpdated($upload));
+        $this->setStatus($upload, UploadStatus::Processing);
 
         try {
-            $handle = fopen($path, 'r');
+            $records = $this->readCsv($upload);
+            $this->processData($upload, $records);
+            $this->setStatus($upload, UploadStatus::Completed);
 
-            if (!$handle) {
-                throw new \Exception('Unable to open CSV file.');
-            }
-
-            $headers = fgetcsv($handle);
-
-            if (!$headers || !is_array($headers)) {
-                $upload->update(['status' => UploadStatus::Failed->value]);
-                broadcast(new UploadStatusUpdated($upload));
-                fclose($handle);
-                return;
-            }
-
-            $headers = array_map(fn($h) => strtoupper(TextNormalizer::clean((string)$h)), $headers);
-
-            if (!in_array('UNIQUE_KEY', $headers, true)) {
-                $upload->update(['status' => UploadStatus::Failed->value]);
-                broadcast(new UploadStatusUpdated($upload));
-                fclose($handle);
-                return;
-            }
-
-            $total = max(0, CSVUtils::countLines($path) - 1);
-            $processed = 0;
-            $successes = 0;
-            $malformed = 0;
-            $upsertErrors = 0;
-
-            while (($row = fgetcsv($handle)) !== false) {
-                $processed++;
-
-                $row = array_map(fn($v) => TextNormalizer::clean((string)$v), $row);
-
-                if (count($row) !== count($headers)) {
-                    $malformed++;
-
-                    $this->updateProgress($upload->id, $processed, $total);
-                    continue;
-                }
-
-                $data = array_combine($headers, $row);
-
-                if ($data === false || ($data['UNIQUE_KEY'] ?? '') === '') {
-                    $malformed++;
-
-                    $this->updateProgress($upload->id, $processed, $total);
-                    continue;
-                }
-
-                try {
-                    $this->products->upsert($data);
-                    $successes++;
-                } catch (\Throwable $e) {
-                    $upsertErrors++;
-                }
-
-                $this->updateProgress($upload->id, $processed, $total);
-            }
-
-            fclose($handle);
-
-            if ($successes === 0) {
-                $upload->update([
-                    'status'       => UploadStatus::Failed->value,
-                    'processed_at' => now(),
-                ]);
-            } else {
-                $errorRate = $processed > 0 ? (($malformed + $upsertErrors) / $processed) : 0.0;
-
-                if ($errorRate >= 0.90) {
-                    $upload->update([
-                        'status'       => UploadStatus::Failed->value,
-                        'processed_at' => now(),
-                    ]);
-                } else {
-                    $upload->update([
-                        'status'       => UploadStatus::Completed->value,
-                        'processed_at' => now(),
-                    ]);
-                }
-            }
-
-        } catch (\Throwable $e) {
-            $upload->update(['status' => UploadStatus::Failed->value]);
+        } catch (Throwable $e) {
+            $this->setStatus($upload, UploadStatus::Failed);
             throw $e;
+
         } finally {
             Redis::del("upload:progress:{$upload->id}");
-            broadcast(new UploadStatusUpdated($upload));
+            broadcast(new UploadStatusUpdated($upload->fresh()));
+
         }
     }
 
-    private function updateProgress(int|string $uploadId, int $processed, int $total): void
+    private function readCsv(Upload $upload): array
     {
-        $progress = $total > 0 ? (int) round(($processed / $total) * 100) : 100;
-        $progress = max(0, min(100, $progress));
+        $csv = Reader::createFromPath($upload->getFirstMediaPath('files'), 'r');
+        $csv->setHeaderOffset(0);
+
+        $headers = array_map(fn ($h) => strtoupper(TextNormalizer::clean($h)), $csv->getHeader());
+
+        if (!in_array('UNIQUE_KEY', $headers, true)) {
+            throw new RuntimeException('Missing UNIQUE_KEY column.');
+        }
+
+        $records = iterator_to_array($csv->getRecords(), false);
+
+        if (empty($records)) {
+            throw new RuntimeException('No records found.');
+        }
+
+        return ['headers' => $headers, 'records' => $records];
+    }
+
+    private function processData(Upload $upload, array $data): void
+    {
+        ['headers' => $headers, 'records' => $records] = $data;
+
+        $total = count($records);
+        $batch = [];
+
+        foreach ($records as $i => $row) {
+            $data = array_change_key_case($row, CASE_UPPER);
+            $data = array_map(fn ($v) => TextNormalizer::clean((string)$v), $data);
+
+            if (count($data) !== count($headers) || empty($data['UNIQUE_KEY'])) {
+                throw new RuntimeException("Malformed row at line " . ($i + 2));
+            }
+
+            $batch[] = $data;
+
+            if (count($batch) >= 500) {
+                $this->products->upsert($batch);
+                $batch = [];
+            }
+
+            $this->updateProgress($upload->id, $i + 1, $total);
+        }
+
+        if (!empty($batch)) {
+            $this->products->upsert($batch);
+        }
+    }
+
+    private function updateProgress(string $uploadId, int $processed, int $total): void
+    {
+        $progress = (int)(($processed / $total) * 100);
+        if ($progress % 5 !== 0 && $progress !== 100) {
+            return;
+        }
 
         Redis::set("upload:progress:{$uploadId}", $progress);
+        broadcast(new UploadProgressUpdated($uploadId, $progress));
+    }
 
-        if ($progress % 5 === 0 || $progress === 100) {
-            broadcast(new UploadProgressUpdated($uploadId, $progress));
-        }
+    private function setStatus(Upload $upload, UploadStatus $status): void
+    {
+        $upload->update([
+            'status' => $status->value,
+            'processed_at' => now(),
+        ]);
+
+        broadcast(new UploadStatusUpdated($upload));
     }
 }
