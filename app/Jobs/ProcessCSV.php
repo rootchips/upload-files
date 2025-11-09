@@ -15,12 +15,12 @@ class ProcessCSV implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
+    public function __construct(public Upload $upload) {}
+
     public function middleware(): array
     {
-        return [new WithoutOverlapping('csv-upload-sequence')];
+        return [new WithoutOverlapping($this->upload->id)];
     }
-
-    public function __construct(public Upload $upload) {}
 
     public function handle(UploadProcessorContract $processor): void
     {
