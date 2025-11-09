@@ -92,8 +92,8 @@ import { storeToRefs } from "pinia";
 const isDragging = ref(false);
 const dragCount = ref(0);
 const fileInput = ref(null);
-const store = useUploadStore();
-const { list: uploads, progress } = storeToRefs(store);
+const uploadStore = useUploadStore();
+const { list: uploads, progress } = storeToRefs(uploadStore);
 const error = ref("");
 const loading = ref(false);
 
@@ -155,7 +155,7 @@ const handleFile = async (file) => {
             return;
       }
       try {
-            await store.uploadFile(file);
+            await uploadStore.uploadFile(file);
       } catch (err) {
             console.error(err);
             error.value = "Upload failed. Please try again.";
@@ -177,9 +177,9 @@ const timeAgo = (datetime) => {
 };
 
 onMounted(async () => {
-      await store.fetchUploads();
-      await store.hydrateProgress();
-      store.ensureRealtime();
+      await uploadStore.fetchUploads();
+      await uploadStore.hydrateProgress();
+      uploadStore.ensureRealtime();
 });
 </script>
 

@@ -71,4 +71,9 @@ class ProductRepository implements ProductRepositoryContract
             throw $e;
         }
     }
+
+    public function clearAll(): void
+    {
+        $this->model->newQuery()->delete();
+    }
 }

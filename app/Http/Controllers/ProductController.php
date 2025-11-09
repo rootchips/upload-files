@@ -1,7 +1,9 @@
 <?php
+
 namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
+use Illuminate\Http\JsonResponse;
 use App\Http\Resources\ProductResource;
 use App\Contracts\ProductRepositoryContract;
 
@@ -17,5 +19,14 @@ class ProductController extends Controller
         $result = $this->products->paginate($search, $perPage);
 
         return ProductResource::collection($result);
+    }
+
+    public function clearAll(): JsonResponse
+    {
+        $this->products->clearAll();
+
+        return response()->json([
+            'message' => 'All products have been deleted.'
+       ]);
     }
 }

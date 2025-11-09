@@ -13,7 +13,6 @@ export const useProductStore = defineStore("products", {
         search: "",
         loading: false,
     }),
-
     actions: {
         async fetch(page = 1) {
             this.loading = true;
@@ -25,10 +24,8 @@ export const useProductStore = defineStore("products", {
                         search: this.search || "",
                     },
                 });
-
                 const response = res.data;
                 this.list = response.data || [];
-
                 const meta = response.meta || {};
                 this.pagination = {
                     current_page: meta.current_page ?? page,
@@ -38,6 +35,16 @@ export const useProductStore = defineStore("products", {
                         (response.data ? response.data.length : 0),
                     last_page: meta.last_page ?? 1,
                 };
+            } finally {
+                this.loading = false;
+            }
+        },
+        async clearAll() {
+            this.loading = true;
+            try {
+                await api.delete("/products/clear");
+                this.list = [];
+                this.pagination.total = 0;
             } finally {
                 this.loading = false;
             }
