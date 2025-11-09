@@ -27,6 +27,7 @@ class UploadProcessorService implements UploadProcessorContract
             $this->setStatus($upload, UploadStatus::FAILED);
             Redis::del("upload:progress:{$upload->id}");
             broadcast(new UploadStatusUpdated($upload->fresh()));
+            
             throw $e;
         }
     }
@@ -37,11 +38,13 @@ class UploadProcessorService implements UploadProcessorContract
         $csv->setHeaderOffset(0);
 
         $headers = array_map(fn ($h) => strtoupper(TextNormalizer::clean($h)), $csv->getHeader());
+
         if (!in_array('UNIQUE_KEY', $headers, true)) {
             throw new RuntimeException('Missing UNIQUE_KEY column.');
         }
 
         $data = iterator_to_array($csv->getRecords(), false);
+
         if (empty($data)) {
             throw new RuntimeException('No data found.');
         }
@@ -72,21 +75,20 @@ class UploadProcessorService implements UploadProcessorContract
                 }
             )
         )
-        ->name("Upload {$upload->id}")
+        ->name("Upload {$uploadId}")
         ->onQueue('upload-sequence')
         ->then(fn () => $this->setStatus($upload, UploadStatus::COMPLETED))
         ->allowFailures(true)
-        ->catch(function () use ($upload) {
-            $uploadId = $upload->id;
+        ->catch(function () use ($uploadId) {
             Redis::set("upload:progress:{$uploadId}", 100);
             broadcast(new UploadProgressUpdated($uploadId, 100));
 
             $this->setStatus($upload, UploadStatus::FAILED);
         })
-        ->finally(fn () => Redis::del("upload:progress:{$upload->id}"))
+        ->finally(fn () => Redis::del("upload:progress:{$uploadId}"))
         ->dispatch();
 
-        Redis::set("upload:batch:{$upload->id}", $batch->id);
+        Redis::set("upload:batch:{$uploadId}", $batch->id);
     }
 
     private function setStatus(Upload $upload, UploadStatus $status): void
